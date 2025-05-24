@@ -1053,18 +1053,39 @@ IMPORTANT:
         }
       } else if (repoInfo.type === 'github') {
         // GitHub API approach
-        // Try to get the tree data for common branch names
         let treeData = null;
         let apiErrorDetails = '';
+        let defaultBranch = '';
 
-        for (const branch of ['main', 'master']) {
+        // Attempt to fetch the default branch
+        const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
+        const headers = createGithubHeaders(token);
+        try {
+          console.log(`Fetching repository info to determine default branch...`);
+          const repoResponse = await fetch(repoInfoUrl, { headers });
+          if (repoResponse.ok) {
+            const repoData = await repoResponse.json();
+            defaultBranch = repoData.default_branch;
+            console.log(`Default branch detected: ${defaultBranch}`);
+          } else {
+            const errorData = await repoResponse.text();
+            console.error(`Error fetching repository info: Status: ${repoResponse.status}, Response: ${errorData}`);
+          }
+        } catch (err) {
+          console.error(`Network error fetching repository info:`, err);
+        }
+
+        // Try to get the tree data, prioritizing the default branch, then common names
+        const branchesToTry = Array.from(new Set(defaultBranch ? [defaultBranch, 'main', 'master'] : ['main', 'master']));
+
+        for (const branch of branchesToTry) {
           const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-          const headers = createGithubHeaders(token);
+          // headers are already defined above
 
           console.log(`Fetching repository structure from branch: ${branch}`);
           try {
             const response = await fetch(apiUrl, {
-              headers
+              headers // Reuse headers
             });
 
             if (response.ok) {
@@ -1074,7 +1095,7 @@ IMPORTANT:
             } else {
               const errorData = await response.text();
               apiErrorDetails = `Status: ${response.status}, Response: ${errorData}`;
-              console.error(`Error fetching repository structure: ${apiErrorDetails}`);
+              console.error(`Error fetching repository structure for branch ${branch}: ${apiErrorDetails}`);
             }
           } catch (err) {
             console.error(`Network error fetching branch ${branch}:`, err);
